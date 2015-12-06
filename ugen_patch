@@ -4,7 +4,7 @@ RCS file: /cvs/src/sys/dev/usb/usb.c,v
 retrieving revision 1.107
 diff -u -p -r1.107 usb.c
 --- usb.c	14 Mar 2015 03:38:50 -0000	1.107
-+++ usb.c	6 Dec 2015 23:19:48 -0000
++++ usb.c	6 Dec 2015 23:28:26 -0000
 @@ -137,6 +137,8 @@ const struct cfattach usb_ca = {
  	usb_activate,
  };
@@ -22,7 +22,7 @@ diff -u -p -r1.107 usb.c
  	}
  	usb_nbuses++;
  
-@@ -792,6 +795,37 @@ usbioctl(dev_t devt, u_long cmd, caddr_t
+@@ -792,6 +795,40 @@ usbioctl(dev_t devt, u_long cmd, caddr_t
  		return (error);
  	}
  
@@ -34,25 +34,28 @@ diff -u -p -r1.107 usb.c
 +		switch (udf->udf_cmd) {
 +		case USB_DEVICE_UGEN_FORCE_GET:
 +		{
-+		  memcpy(udf, &usb_udf, sizeof(usb_udf));
-+		  break;
++		        memcpy(udf, &usb_udf, sizeof(usb_udf));
++		        break;
 +		}
 +		case USB_DEVICE_UGEN_FORCE_SET:
 +		{
-+		  memcpy(&usb_udf, udf, sizeof(usb_udf));
-+		  break;
++		        memcpy(&usb_udf, udf, sizeof(usb_udf));
++		        break;
 +		}
 +		case USB_DEVICE_UGEN_FORCE_RESET:
 +		{
-+		  struct usbd_device *dev;
++		        struct usbd_device *dev;
 +
-+		  dev = sc->sc_bus->devices[udf->udf_addr];
-+		  usbd_reset_port(dev->myhub, dev->powersrc->portno);
-+		  usb_needs_reattach(dev);
-+		  break;
++		        if (udf->udf_addr < 1 ||
++			    udf->udf_addr >= USB_MAX_DEVICES)
++		                return (EINVAL);
++		        dev = sc->sc_bus->devices[udf->udf_addr];
++		        usbd_reset_port(dev->myhub, dev->powersrc->portno);
++		        usb_needs_reattach(dev);
++		        break;
 +		}
 +		default:
-+		  return (EINVAL);
++		        return (EINVAL);
 +		}
 +		return (0);
 +	}
@@ -66,7 +69,7 @@ RCS file: /cvs/src/sys/dev/usb/usb.h,v
 retrieving revision 1.53
 diff -u -p -r1.53 usb.h
 --- usb.h	9 Jul 2015 05:40:44 -0000	1.53
-+++ usb.h	6 Dec 2015 23:19:48 -0000
++++ usb.h	6 Dec 2015 23:28:27 -0000
 @@ -749,6 +749,17 @@ struct usb_device_stats {
  	u_long	uds_requests[4];	/* indexed by transfer type UE_* */
  };
@@ -99,7 +102,7 @@ RCS file: /cvs/src/sys/dev/usb/usb_subr.c,v
 retrieving revision 1.117
 diff -u -p -r1.117 usb_subr.c
 --- usb_subr.c	23 Mar 2015 22:26:01 -0000	1.117
-+++ usb_subr.c	6 Dec 2015 23:19:48 -0000
++++ usb_subr.c	6 Dec 2015 23:28:27 -0000
 @@ -840,6 +840,7 @@ usbd_probe_and_attach(struct device *par
  	struct device *dv;
  	struct usbd_interface **ifaces;
