@@ -33,7 +33,7 @@ diff -u -p -r1.107 usb.c
 +
 +		if (udf->udf_set) // replace our list
 +		{
-+                        memcpy(&usb_udf, udf, sizeof(usb_udf));
++                       memcpy(&usb_udf, udf, sizeof(usb_udf));
 +			return (0);
 +		}
 +		else              // return the list
