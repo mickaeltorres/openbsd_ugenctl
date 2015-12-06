@@ -1,0 +1,45 @@
+.Dd $Mdocdate: December 6 2015 $
+.Dt UGENCTL 8
+.Os
+.Sh NAME
+.Nm ugenctl
+.Nd select which usb devices are forced to attach to ugen
+.Sh SYNOPSIS
+.Nm
+.Op Fl f Ar dev
+.Op Fl r Ar vid:pid
+.Op Fl s Ar vid:pid
+.Sh DESCRIPTION
+.Nm
+permits to change the in-kernel list of devices that are forced to attach as
+ugen(4), even if they have a more specific driver. The actual list is printed
+at the end of any operation. If no operation are specified, it only prints
+the list.
+.Pp
+The options are as follows:
+.Bl -tag -width Fl
+.It Fl f Ar dev
+Select the usb controller device to use, instead of the default (/dev/usb0).
+It has no incidence on the operation, devices connected to ALL controllers will
+be affected.
+.It Fl r Ar vid:pid
+Remove the device identified by the vid:pid pair from the list, if it is on it.
+.It Fl s Ar vid:pid
+Add the device identified by the vid:pid pair on the list.
+.El
+.Sh FILES
+.Bl -tag -width Pa
+.It Pa /dev/usb[0-9]
+Default USB controllers.
+.El
+.Sh SEE ALSO
+.Xr usb 4
+.Xr ugen 4
+.Sh HISTORY
+The
+.Nm
+command appeared in
+.Ox 5.9 .
+.Sh BUGS
+Actually the maximum number of forced devices is constant and defined in macro
+USB_DEVICE_UGEN_FORCE_MAX in usb.h .
