@@ -17,25 +17,25 @@ diff -r1.107 usb.c
 > 		switch (udf->udf_cmd) {
 > 		case USB_DEVICE_UGEN_FORCE_GET:
 > 		{
-> 		  memcpy(udf, &usb_udf, sizeof(usb_udf));
-> 		  break;
+> 		        memcpy(udf, &usb_udf, sizeof(usb_udf));
+> 		        break;
 > 		}
 > 		case USB_DEVICE_UGEN_FORCE_SET:
 > 		{
-> 		  memcpy(&usb_udf, udf, sizeof(usb_udf));
-> 		  break;
+> 		        memcpy(&usb_udf, udf, sizeof(usb_udf));
+> 		        break;
 > 		}
 > 		case USB_DEVICE_UGEN_FORCE_RESET:
 > 		{
-> 		  struct usbd_device *dev;
+> 		        struct usbd_device *dev;
 > 
-> 		  dev = sc->sc_bus->devices[udf->udf_addr];
-> 		  usbd_reset_port(dev->myhub, dev->powersrc->portno);
-> 		  usb_needs_reattach(dev);
-> 		  break;
+> 		        dev = sc->sc_bus->devices[udf->udf_addr];
+> 		        usbd_reset_port(dev->myhub, dev->powersrc->portno);
+> 		        usb_needs_reattach(dev);
+> 		        break;
 > 		}
 > 		default:
-> 		  return (EINVAL);
+> 		        return (EINVAL);
 > 		}
 > 		return (0);
 > 	}
