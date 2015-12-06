@@ -2,106 +2,76 @@ Index: usb.c
 ===================================================================
 RCS file: /cvs/src/sys/dev/usb/usb.c,v
 retrieving revision 1.107
-diff -u -p -r1.107 usb.c
---- usb.c	14 Mar 2015 03:38:50 -0000	1.107
-+++ usb.c	6 Dec 2015 04:29:22 -0000
-@@ -137,6 +137,8 @@ const struct cfattach usb_ca = {
- 	usb_activate,
- };
- 
-+struct usb_device_ugen_force usb_udf;
-+
- int
- usb_match(struct device *parent, void *match, void *aux)
- {
-@@ -156,6 +158,7 @@ usb_attach(struct device *parent, struct
- 		TAILQ_INIT(&usb_generic_tasks);
- 		usb_run_tasks = usb_run_abort_tasks = 1;
- 		kthread_create_deferred(usb_create_task_threads, NULL);
-+		bzero(&usb_udf, sizeof(usb_udf));
- 	}
- 	usb_nbuses++;
- 
-@@ -792,6 +795,23 @@ usbioctl(dev_t devt, u_long cmd, caddr_t
- 		return (error);
- 	}
- 
-+	case USB_DEVICE_FORCE_UGEN:
-+	{
-+	        struct usb_device_ugen_force *udf =
-+	                (struct usb_device_ugen_force *)data;
-+
-+		if (udf->udf_set) // replace our list
-+		{
-+                       memcpy(&usb_udf, udf, sizeof(usb_udf));
-+			return (0);
-+		}
-+		else              // return the list
-+		{
-+		        memcpy(udf, &usb_udf, sizeof(usb_udf));
-+		        return (0);
-+		}
-+	}
-+	
- 	default:
- 		return (EINVAL);
- 	}
+diff -r1.107 usb.c
+139a140,141
+> struct usb_device_ugen_force usb_udf;
+> 
+158a161
+> 		bzero(&usb_udf, sizeof(usb_udf));
+794a798,828
+> 	case USB_DEVICE_FORCE_UGEN:
+> 	{
+> 	        struct usb_device_ugen_force *udf =
+> 	                (struct usb_device_ugen_force *)data;
+> 
+> 		switch (udf->udf_cmd) {
+> 		case USB_DEVICE_UGEN_FORCE_GET:
+> 		{
+> 		  memcpy(udf, &usb_udf, sizeof(usb_udf));
+> 		  break;
+> 		}
+> 		case USB_DEVICE_UGEN_FORCE_SET:
+> 		{
+> 		  memcpy(&usb_udf, udf, sizeof(usb_udf));
+> 		  break;
+> 		}
+> 		case USB_DEVICE_UGEN_FORCE_RESET:
+> 		{
+> 		  struct usbd_device *dev;
+> 
+> 		  dev = sc->sc_bus->devices[udf->udf_addr];
+> 		  usbd_reset_port(dev->myhub, dev->powersrc->portno);
+> 		  usb_needs_reattach(dev);
+> 		  break;
+> 		}
+> 		default:
+> 		  return (EINVAL);
+> 		}
+> 		return (0);
+> 	}
+> 	
 Index: usb.h
 ===================================================================
 RCS file: /cvs/src/sys/dev/usb/usb.h,v
 retrieving revision 1.53
-diff -u -p -r1.53 usb.h
---- usb.h	9 Jul 2015 05:40:44 -0000	1.53
-+++ usb.h	6 Dec 2015 04:29:23 -0000
-@@ -749,6 +749,13 @@ struct usb_device_stats {
- 	u_long	uds_requests[4];	/* indexed by transfer type UE_* */
- };
- 
-+#define USB_DEVICE_UGEN_FORCE_MAX 16
-+struct usb_device_ugen_force {
-+        int udf_set;
-+        u_short udf_ven_id[USB_DEVICE_UGEN_FORCE_MAX];
-+        u_short udf_dev_id[USB_DEVICE_UGEN_FORCE_MAX];
-+};        
-+
- /* USB controller */
- #define USB_REQUEST		_IOWR('U', 1, struct usb_ctl_request)
- #define USB_SETDEBUG		_IOW ('U', 2, unsigned int)
-@@ -758,6 +765,7 @@ struct usb_device_stats {
- #define USB_DEVICE_GET_CDESC	_IOWR('U', 6, struct usb_device_cdesc)
- #define USB_DEVICE_GET_FDESC	_IOWR('U', 7, struct usb_device_fdesc)
- #define USB_DEVICE_GET_DDESC	_IOWR('U', 8, struct usb_device_ddesc)
-+#define USB_DEVICE_FORCE_UGEN   _IOWR('U', 9, struct usb_device_ugen_force)
- 
- /* Generic HID device */
- #define USB_GET_REPORT_DESC	_IOR ('U', 21, struct usb_ctl_report_desc)
+diff -r1.53 usb.h
+751a752,762
+> #define USB_DEVICE_UGEN_FORCE_MAX 16
+> #define USB_DEVICE_UGEN_FORCE_GET 0
+> #define USB_DEVICE_UGEN_FORCE_SET 1
+> #define USB_DEVICE_UGEN_FORCE_RESET 2
+> struct usb_device_ugen_force {
+>         int udf_cmd;
+>         u_char udf_addr;
+>         u_short udf_ven_id[USB_DEVICE_UGEN_FORCE_MAX];
+>         u_short udf_dev_id[USB_DEVICE_UGEN_FORCE_MAX];
+> };        
+> 
+760a772
+> #define USB_DEVICE_FORCE_UGEN   _IOWR('U', 9, struct usb_device_ugen_force)
 Index: usb_subr.c
 ===================================================================
 RCS file: /cvs/src/sys/dev/usb/usb_subr.c,v
 retrieving revision 1.117
-diff -u -p -r1.117 usb_subr.c
---- usb_subr.c	23 Mar 2015 22:26:01 -0000	1.117
-+++ usb_subr.c	6 Dec 2015 04:29:23 -0000
-@@ -840,6 +840,7 @@ usbd_probe_and_attach(struct device *par
- 	struct device *dv;
- 	struct usbd_interface **ifaces;
- 	extern struct rwlock usbpalock;
-+	extern struct usb_device_ugen_force usb_udf;
- 
- 	rw_enter_write(&usbpalock);
- 
-@@ -855,6 +856,14 @@ usbd_probe_and_attach(struct device *par
- 	uaa.product = UGETW(dd->idProduct);
- 	uaa.release = UGETW(dd->bcdDevice);
- 
-+	/* Check if this device is in the ugen force list */
-+	for (i = 0; i < USB_DEVICE_UGEN_FORCE_MAX; i++)
-+	        if ((usb_udf.udf_ven_id[i] == uaa.vendor) &&
-+		    (usb_udf.udf_dev_id[i] == uaa.product))
-+	                break;
-+	if (i != USB_DEVICE_UGEN_FORCE_MAX)
-+	        goto generic;
-+	
- 	/* First try with device specific drivers. */
- 	DPRINTF(("usbd_probe_and_attach trying device specific drivers\n"));
- 	dv = config_found(parent, &uaa, usbd_print);
+diff -r1.117 usb_subr.c
+842a843
+> 	extern struct usb_device_ugen_force usb_udf;
+857a859,866
+> 	/* Check if this device is in the ugen force list */
+> 	for (i = 0; i < USB_DEVICE_UGEN_FORCE_MAX; i++)
+> 	        if ((usb_udf.udf_ven_id[i] == uaa.vendor) &&
+> 		    (usb_udf.udf_dev_id[i] == uaa.product))
+> 	                break;
+> 	if (i != USB_DEVICE_UGEN_FORCE_MAX)
+> 	        goto generic;
+> 	
